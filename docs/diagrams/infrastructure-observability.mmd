@@ -1,0 +1,51 @@
+%% Visão de infraestrutura e observabilidade do cluster.
+%% O diagrama completo da solução permanece no repositório da aplicação.
+flowchart LR
+    subgraph AWS["AWS Academy — VPC 10.0.0.0/16"]
+        IGW[Internet Gateway] --> PUB[Subnets públicas]
+        PUB --> NAT[NAT Gateway]
+        NAT --> PRIV[Subnets privadas]
+
+        subgraph EKS["Amazon EKS 1.34"]
+            NODES[Managed node group<br/>LabRole]
+            subgraph NSAPP["namespace oficina"]
+                APP[Deployment oficina-app<br/>Java APM + logs JSON]
+                HPA[HPA CPU/memória]
+            end
+            subgraph NSNR["namespace newrelic"]
+                INFRA[newrelic-infrastructure]
+                KSM[kube-state-metrics]
+                EVENTS[nri-kube-events]
+                LOGGING[newrelic-logging]
+                PROM[newrelic-prometheus-agent]
+                INJECT[nri-metadata-injection]
+                SECRET[(Secret newrelic-license)]
+            end
+            METRICS[Metrics Server]
+        end
+    end
+
+    PRIV --> NODES
+    METRICS --> HPA
+    HPA --> APP
+    INJECT -. NEW_RELIC_METADATA_KUBERNETES_* .-> APP
+    SECRET -. license key .-> INFRA
+    SECRET -. license key .-> LOGGING
+
+    APP -- traces e eventos de negócio --> NR[(New Relic)]
+    LOGGING -- logs com trace.id --> NR
+    INFRA --> NR
+    KSM --> INFRA
+    EVENTS --> NR
+    PROM --> NR
+
+    subgraph IAC["Observabilidade como código"]
+        TFNR[Terraform provider newrelic]
+    end
+
+    TFNR --> DASH[Dashboards]
+    TFNR --> ALERTS[Política e condições]
+    TFNR --> SYNTH[Monitor sintético]
+    DASH --- NR
+    ALERTS --- NR
+    SYNTH --- NR
