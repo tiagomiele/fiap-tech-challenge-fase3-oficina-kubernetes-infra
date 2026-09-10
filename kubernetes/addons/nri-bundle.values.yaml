@@ -16,7 +16,7 @@ global:
   customAttributes:
     project: oficina
     environment: ""
-    repository: oficina-kubernetes-infra-fiap-fase3
+    repository: fiap-tech-challenge-fase3-oficina-kubernetes-infra
   labels:
     app.kubernetes.io/part-of: oficina-observability
   podLabels:
