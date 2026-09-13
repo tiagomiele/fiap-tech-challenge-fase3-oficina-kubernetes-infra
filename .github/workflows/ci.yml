@@ -26,14 +26,26 @@ jobs:
           fetch-depth: 0
 
       - name: Validate required documentation
+        shell: bash
         run: |
-          test -f README.md
-          test -f docs/architecture.md
-          test -f docs/aws-academy.md
-          test -f docs/new-relic.md
-          test -f docs/hcp-terraform.md
-          test -f docs/observability-as-code.md
-          test -f docs/deployment.md
+          required_files=(
+            "README.md"
+            "docs/cicd.md"
+            "docs/infraestrutura-observabilidade.md"
+            "docs/assets/arquitetura-kubernetes-resumida.png"
+            "docs/assets/cicd-kubernetes-homologacao.png"
+            "docs/assets/cicd-kubernetes-producao.png"
+            "docs/assets/infraestrutura-observabilidade-kubernetes.png"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error file=$file::Arquivo obrigatório ausente ou vazio: $file"
+              exit 1
+            fi
+          done
+
+          echo "Documentação obrigatória validada."
 
       - name: Validate GitHub Actions workflows
         run: |
