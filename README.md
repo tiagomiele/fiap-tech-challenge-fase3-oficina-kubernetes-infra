@@ -1,110 +1,77 @@
-# Oficina Kubernetes Infrastructure — Fase 3
+# Oficina Fase 3 — Kubernetes
 
-Infraestrutura como código do ambiente Kubernetes e da observabilidade da
-oficina mecânica na AWS Academy.
+Documentação da plataforma EKS, da escalabilidade e da observabilidade da Oficina. A visão completa da solução está no [repositório central](https://github.com/tiagomiele/backend).
+
+Projeto de implementação: [fiap-tech-challenge-fase3-oficina-kubernetes-infra](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-kubernetes-infra)
+
+## Visão de negócio
+
+O Kubernetes sustenta a continuidade da operação da oficina. Se a demanda aumentar, a plataforma deve ampliar a capacidade do Backend; se um pod falhar ou precisar ser atualizado, o atendimento deve continuar disponível; se houver degradação, a equipe precisa identificá-la rapidamente.
+
+Esse projeto não implementa regras de clientes ou Ordens de Serviço. Ele oferece a base para que essas funcionalidades operem com escalabilidade, alta disponibilidade, isolamento de rede e visibilidade sobre saúde, consumo e falhas.
 
 ## Responsabilidades
 
-- VPC, subnets, rotas, Internet Gateway e NAT Gateway;
-- Amazon EKS 1.34 e node groups;
-- Load Balancer e conectividade privada;
-- Metrics Server e suporte ao HPA da aplicação;
-- integração Kubernetes do New Relic (`nri-bundle`);
-- dashboards, alertas e monitor sintético do New Relic como código;
-- outputs de rede consumidos pelos outros repositórios.
+- provisionar VPC, sub-redes, rotas, Internet Gateway e NAT Gateway;
+- criar Amazon EKS e managed node groups;
+- fornecer conectividade e Load Balancer para o Backend;
+- instalar Metrics Server e suportar HPA por CPU e memória;
+- integrar o cluster ao New Relic por Helm;
+- criar dashboards, alertas e monitor sintético como código;
+- disponibilizar outputs de rede para Database e Auth;
+- separar states e configurações de homologação e produção.
 
-Não contém aplicação Spring Boot, Lambda, schema ou provisionamento do RDS.
+Aplicação Spring Boot, autenticação, schema e RDS permanecem fora deste repositório.
 
-## Arquitetura
+## Arquitetura do componente
 
-```mermaid
-flowchart TB
-    APIGW[API Gateway] --> LB[Load Balancer]
-    LB --> EKS[Amazon EKS 1.34]
-    EKS --> Pods[Pods da aplicação]
-    HPA[HPA CPU/memória] --> Pods
-    MS[Metrics Server] --> HPA
-    EKS --> NR[nri-bundle no namespace newrelic]
-    NR --> NRP[(New Relic)]
-    TF[Terraform provider newrelic] --> NRP
-```
+![Arquitetura resumida da plataforma Kubernetes com escalabilidade, disponibilidade e observabilidade](docs/assets/arquitetura-kubernetes-resumida.png)
 
-Diagrama detalhado da camada de infraestrutura e observabilidade em
-`docs/diagrams/infrastructure-observability.mmd`.
+## Modelo arquitetural e práticas
 
-## Estrutura
+O projeto utiliza **Infrastructure as Code declarativa**. Terraform separa rede, cluster, outputs e observabilidade; Helm e arquivos de valores configuram add-ons internos do Kubernetes. Os ambientes possuem workspaces HCP e GitHub Environments independentes.
 
-| Caminho | Conteúdo |
+Clean Architecture descreve a organização do Backend e não se aplica diretamente a um repositório de plataforma. Aqui, as boas práticas são modularidade de infraestrutura, configuração versionada, versões fixadas, plan antes do apply, mínimo privilégio, segredos externos, validação offline e observabilidade como código.
+
+A alta disponibilidade combina múltiplas réplicas, HPA, PodDisruptionBudget, probes, rolling update e distribuição de pods por host e zona.
+
+## Stack e ferramentas
+
+| Área | Tecnologias |
 |---|---|
-| `network.tf`, `eks.tf`, `variables.tf`, `outputs.tf` | rede, EKS 1.34 e add-ons gerenciados |
-| `environments/*.tfvars.example` | exemplos de variáveis por ambiente |
-| `kubernetes/addons/` | values dos charts e versões fixadas |
-| `scripts/` | validação de sessão AWS, deploy, sincronização de outputs, verificação e lint offline |
-| `observability/newrelic/` | dashboards, alertas, sintético e notificações |
-| `.github/workflows/` | CI, plan e deploy automático por merge com gates |
+| Nuvem | AWS VPC, Amazon EKS 1.34, node groups e Load Balancer |
+| Orquestração | Kubernetes, Helm, Metrics Server, HPA, PDB e probes |
+| Infraestrutura | Terraform, HCP Terraform e providers AWS/Kubernetes/Helm |
+| Observabilidade | New Relic `nri-bundle`, dashboards, alertas e monitor sintético |
+| Automação | GitHub Actions, Bash, Python e PowerShell |
+| Qualidade | Terraform Validate, TFLint, yamllint, ShellCheck, actionlint e testes Python |
+| Segurança | Trivy, Gitleaks e Secrets externos ao repositório |
 
-## Tecnologias
+## Execução e deploy
 
-- Terraform `>= 1.6, < 2.0` e HCP Terraform (workspaces separados por ambiente);
-- AWS VPC, EKS 1.34 e Load Balancer;
-- Kubernetes, Helm, Metrics Server e HPA;
-- New Relic `nri-bundle` `8.0.10` e provider Terraform `newrelic` `~> 3.95.0`;
-- GitHub Actions com GitHub Environments.
-
-## Segredos
-
-Nenhuma credencial é versionada. Por GitHub Environment (`homolog` e
-`production`):
-
-- secrets: `TF_API_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  `AWS_SESSION_TOKEN`, `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_API_KEY`;
-- variables: `TF_CLOUD_ORGANIZATION`, `TF_WORKSPACE_HOMOLOG`,
-  `TF_WORKSPACE_PRODUCTION`, `TF_WORKSPACE_OBSERVABILITY_HOMOLOG`,
-  `TF_WORKSPACE_OBSERVABILITY_PRODUCTION`, `NEW_RELIC_ACCOUNT_ID` e, quando
-  necessário, `AWS_REGION`, `CLUSTER_NAME`, `APP_NAMESPACE`,
-  `HEALTH_CHECK_URL`, `SYNTHETIC_MONITOR_ENABLED`.
-
-A license key do New Relic só existe como secret do GitHub Environment e como
-Secret Kubernetes `newrelic-license` (chave `licenseKey`, namespace `newrelic`),
-criado no momento do deploy e referenciado por `global.customSecretName`.
-
-## Validação gratuita
+Validação local do projeto original:
 
 ```bash
 terraform fmt -check -recursive
 terraform init -backend=false -input=false -lockfile=readonly
 terraform validate
-
-cd observability/newrelic && terraform init -backend=false -lockfile=readonly && terraform validate && cd -
-
-./scripts/lint-cluster-addons.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
-yamllint -c .yamllint.yml kubernetes .github/workflows
-shellcheck scripts/*.sh
+./scripts/lint-cluster-addons.sh
 ```
 
-O CI executa essas validações, os testes da sincronização de outputs, TFLint, Trivy e Gitleaks em quatro jobs sequenciais: validação do repositório → Terraform da infraestrutura → Terraform da observabilidade → add-ons Kubernetes. Pull Requests nunca executam apply.
+Pull Requests executam CI e plans de infraestrutura e observabilidade, sem apply. O merge em `homolog` cria ou atualiza a plataforma de homologação; a promoção para `main` executa produção após o gate do GitHub Environment. Depois do cluster, o workflow sincroniza os outputs de rede, instala add-ons e aplica a observabilidade.
 
-## Deploy
+- [Fluxo CI/CD específico](docs/cicd.md)
+- [CI/CD integrado da solução](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-backend/blob/documentation/docs/cicd-promocao.md)
+- [Bootstrap AWS](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-backend/blob/documentation/docs/bootstrap-aws-do-zero.md)
 
-Pull Requests para `homolog` ou `main` executam plans automáticos de infraestrutura e observabilidade sem apply. O workflow **Deploy homolog** executa validação → plan/apply da infraestrutura → sincronização dos outputs de rede com Database/Auth → add-ons → plan/apply da observabilidade → resumo, sem ação manual intermediária. O workflow independente **Deploy production** executa a mesma sequência após uma única aprovação no GitHub Environment `production`. A execução manual permite repetir o deploy completo no workflow e na branch correspondentes durante bootstrap ou recuperação; não é necessário iniciar um plan separado. Destroy permanece manual fora da esteira. Detalhes em [Deploy, rollback e troubleshooting](docs/deployment.md).
+## Documentação técnica
 
-## Documentação
+- [Infraestrutura e observabilidade](docs/infraestrutura-observabilidade.md)
+- [ADR de HPA e alta disponibilidade](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-backend/blob/documentation/docs/decisions/adr/0003-alta-disponibilidade-hpa.md)
+- [RFC de observabilidade New Relic](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-backend/blob/documentation/docs/decisions/rfc/0004-observabilidade-new-relic.md)
+- [Evidência histórica do deploy de produção](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-kubernetes-infra/actions/runs/34524817503)
 
-- [Arquitetura](docs/architecture.md)
-- [AWS Academy](docs/aws-academy.md)
-- [New Relic no Kubernetes](docs/new-relic.md)
-- [Observabilidade como código](docs/observability-as-code.md)
-- [Add-ons e escalabilidade](docs/kubernetes-addons.md)
-- [Deploy, rollback e troubleshooting](docs/deployment.md)
-- [HCP Terraform e execução](docs/hcp-terraform.md)
-- [Validação](docs/validation.md)
-- [Repositórios da solução](docs/repositories.md)
+## Swagger/Postman
 
-## Contribuição
-
-- mudanças somente por Pull Request;
-- `main` representa produção;
-- `homolog` representa homologação;
-- plan obrigatório antes do apply;
-- nenhum segredo ou arquivo de state versionado.
+Não aplicável: este repositório não publica APIs de negócio. Os contratos e validações funcionais estão no [índice central de APIs e testes](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-backend/blob/documentation/docs/evidencias.md).
