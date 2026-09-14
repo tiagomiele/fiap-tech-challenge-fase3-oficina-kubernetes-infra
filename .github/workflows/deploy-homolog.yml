@@ -1,4 +1,5 @@
 # workflow Deploy homolog
+# validação deploy da aplicação homolog, infraestrutura, add-ons e observabilidade
 name: Deploy homolog
 
 on:
