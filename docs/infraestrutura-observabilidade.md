@@ -20,5 +20,3 @@
 - Monitor sintético para o healthcheck do Backend.
 
 [Evidência do deploy de produção](https://github.com/tiagomiele/fiap-tech-challenge-fase3-oficina-kubernetes-infra/actions/runs/34524817503)
-
-[Dashboard New Relic](https://one.newrelic.com/redirect/entity/ODM5MzU2NHxWSVp8REFTSEJPQVJEfGRhOjEzMTYxOTMx)
